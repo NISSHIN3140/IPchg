@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IPリモコン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --body:#D3D6CE; --shell:#C4C8BE; --lcd:#B8C5A4; --lcd-ink:#1D2A16; --lcd-dim:#66765A;
+  --key:#F3F3EE; --key-ink:#22261F; --key-edge:#9EA397;
+  --fn:#56606C; --fn-ink:#F3F3EE; --fn-edge:#363D45;
+  --go:#F2B705; --go-ink:#211B05; --go-edge:#A97F00;
+  --err:#A8231B; --text:#22261F; --muted:#59604F; --chip:#E7E9E2;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --body:#1E2125; --shell:#2A2E34; --lcd:#251D12; --lcd-ink:#FFC46B; --lcd-dim:#9C7C4B;
+    --key:#3A3F46; --key-ink:#ECEDEA; --key-edge:#17191C;
+    --fn:#5E6874; --fn-ink:#FFFFFF; --fn-edge:#2E343B;
+    --go:#F2B705; --go-ink:#211B05; --go-edge:#8A6800;
+    --err:#FF8F85; --text:#E6E7E3; --muted:#9EA49B; --chip:#33373D;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --body:#1E2125; --shell:#2A2E34; --lcd:#251D12; --lcd-ink:#FFC46B; --lcd-dim:#9C7C4B;
+  --key:#3A3F46; --key-ink:#ECEDEA; --key-edge:#17191C;
+  --fn:#5E6874; --fn-ink:#FFFFFF; --fn-edge:#2E343B;
+  --go:#F2B705; --go-ink:#211B05; --go-edge:#8A6800;
+  --err:#FF8F85; --text:#E6E7E3; --muted:#9EA49B; --chip:#33373D;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--body);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-action:manipulation}
+button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+
+.unit{max-width:440px;margin:0 auto;padding:12px 14px 28px;display:flex;flex-direction:column;gap:12px}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.top h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.02em}
+.conn{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--chip);font-size:14px;font-weight:600}
+.led{width:10px;height:10px;border-radius:50%;background:var(--muted);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.conn.on .led{background:#3BB54A;box-shadow:0 0 6px #3BB54A}
+
+.ad-list{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.ad-list::-webkit-scrollbar{display:none}
+.ad{flex:0 0 auto;min-width:150px;text-align:left;padding:8px 12px;border-radius:10px;background:var(--chip);border:2px solid transparent}
+.ad[aria-pressed="true"]{border-color:var(--go)}
+.ad b{display:block;font-size:14px}
+.ad span{display:block;font-family:var(--mono);font-size:13px;color:var(--muted)}
+.ad.down{opacity:.6}
+.hint{margin:0;font-size:13px;color:var(--muted)}
+
+.lcd{background:var(--lcd);color:var(--lcd-ink);border-radius:6px;padding:12px 14px 10px;
+  box-shadow:inset 0 2px 0 rgba(0,0,0,.18),0 0 0 6px var(--shell)}
+.row{display:grid;grid-template-columns:3.6em 1fr auto;align-items:baseline;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
+.row .lbl{font-size:12px;color:var(--lcd-dim);font-weight:700}
+.row .val{font-family:var(--mono);font-weight:600;font-size:clamp(22px,7vw,28px);letter-spacing:.01em;white-space:nowrap;overflow:hidden;min-height:1.3em}
+.row .val:empty::before{content:"···";color:var(--lcd-dim)}
+.row .aux{font-family:var(--mono);font-size:13px;color:var(--lcd-dim)}
+.row.active{background:rgba(0,0,0,.07)}
+.row.active .val::after{content:"";display:inline-block;width:.55em;height:1em;margin-left:2px;vertical-align:-.12em;background:currentColor;animation:blink 1s steps(1) infinite}
+.row.active .val:empty::before{content:""}
+.row.bad .val{color:var(--err)}
+@keyframes blink{50%{opacity:0}}
+.msg{margin:8px 4px 0;font-size:13px;min-height:1.5em;border-top:1px dashed var(--lcd-dim);padding-top:6px}
+.msg.err{color:var(--err);font-weight:600}
+
+.quick{display:flex;flex-wrap:wrap;gap:6px}
+.quick button{padding:6px 11px;border-radius:8px;background:var(--chip);font-size:13px;font-weight:600}
+.quick .sep{width:1px;background:var(--muted);opacity:.4;margin:2px 2px}
+
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.k{height:58px;border-radius:12px;background:var(--key);color:var(--key-ink);font-family:var(--mono);font-size:24px;font-weight:600;
+  border-bottom:4px solid var(--key-edge);transition:transform .05s}
+.k:active{transform:translateY(3px);border-bottom-width:1px}
+.k.op{background:var(--fn);color:var(--fn-ink);border-bottom-color:var(--fn-edge);font-family:var(--sans);font-size:17px}
+.k.next{grid-row:span 2;height:auto}
+.k.zero{grid-column:span 2}
+
+.actions{display:grid;grid-template-columns:1fr 1.4fr;gap:8px}
+.actions button{height:56px;border-radius:12px;font-size:16px;font-weight:700;transition:transform .05s}
+.actions button:active:not(:disabled){transform:translateY(3px)}
+.fn{background:var(--fn);color:var(--fn-ink);border-bottom:4px solid var(--fn-edge)}
+.go{background:var(--go);color:var(--go-ink);border-bottom:4px solid var(--go-edge)}
+.actions button[data-armed]{outline:3px solid var(--err);outline-offset:2px}
+.actions button:disabled{opacity:.45;cursor:default}
+
+.recent h2{margin:4px 0 6px;font-size:13px;font-weight:600;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:6px 10px;border-radius:8px;background:var(--chip);font-family:var(--mono);font-size:13px;text-align:left;line-height:1.3}
+.chips button small{display:block;color:var(--muted);font-size:11px}
+
+.settings{font-size:14px;color:var(--muted)}
+.settings summary{cursor:pointer;padding:4px 0}
+.settings label{display:flex;align-items:center;gap:10px;margin-top:6px}
+.settings input{font-size:16px;padding:8px 10px;border-radius:8px;border:1px solid var(--key-edge);background:var(--key);color:var(--key-ink);width:9em;-webkit-user-select:text;user-select:text}
+
+@media (prefers-reduced-motion:reduce){
+  .row.active .val::after{animation:none}
+  .k,.actions button{transition:none}
+}
+</style>
+</head>
+<body>
+<main class="unit">
+  <header class="top">
+    <h1>IPリモコン</h1>
+    <button id="btnConn" class="conn" type="button"><span class="led"></span><span id="connLabel">PCに接続</span></button>
+  </header>
+
+  <section aria-label="ネットワークアダプタ">
+    <div id="adList" class="ad-list"><p class="hint">接続するとPCのアダプタが表示されます</p></div>
+  </section>
+
+  <section class="lcd">
+    <div class="row" data-f="ip"><span class="lbl">IP</span><span class="val" id="v-ip"></span><span class="aux"></span></div>
+    <div class="row" data-f="mask"><span class="lbl">マスク</span><span class="val" id="v-mask"></span><span class="aux" id="v-prefix"></span></div>
+    <div class="row" data-f="gw"><span class="lbl">GW</span><span class="val" id="v-gw"></span><span class="aux"></span></div>
+    <p class="msg" id="msg" aria-live="polite"></p>
+  </section>
+
+  <div class="quick">
+    <button type="button" data-q="24">/24</button>
+    <button type="button" data-q="16">/16</button>
+    <button type="button" data-q="8">/8</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" data-q="gw1">GW を .1 に</button>
+    <button type="button" data-q="gwnone">GW なし</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" data-q="load">現在値を読込</button>
+  </div>
+
+  <div class="pad">
+    <button type="button" class="k" data-k="7">7</button>
+    <button type="button" class="k" data-k="8">8</button>
+    <button type="button" class="k" data-k="9">9</button>
+    <button type="button" class="k op" data-k="bs" aria-label="1文字消す">⌫</button>
+    <button type="button" class="k" data-k="4">4</button>
+    <button type="button" class="k" data-k="5">5</button>
+    <button type="button" class="k" data-k="6">6</button>
+    <button type="button" class="k op" data-k="c">クリア</button>
+    <button type="button" class="k" data-k="1">1</button>
+    <button type="button" class="k" data-k="2">2</button>
+    <button type="button" class="k" data-k="3">3</button>
+    <button type="button" class="k op next" data-k="next">次へ</button>
+    <button type="button" class="k zero" data-k="0">0</button>
+    <button type="button" class="k" data-k=".">.</button>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="btnDhcp" class="fn" data-label="DHCPに戻す">DHCPに戻す</button>
+    <button type="button" id="btnApply" class="go" data-label="この設定を適用">この設定を適用</button>
+  </div>
+
+  <section class="recent">
+    <h2>最近適用した設定</h2>
+    <div id="hist" class="chips"></div>
+  </section>
+
+  <details class="settings">
+    <summary>PIN設定</summary>
+    <label>PC側スクリプトと同じPIN
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+    </label>
+  </details>
+</main>
+
+<script>
+const SVC = '6b1e0001-6e4b-4f2a-9d3c-1a7f2c0e5b01';
+const CMD = '6b1e0002-6e4b-4f2a-9d3c-1a7f2c0e5b01';
+const RES = '6b1e0003-6e4b-4f2a-9d3c-1a7f2c0e5b01';
+const F = ['ip', 'mask', 'gw'];
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+const st = { ip: '', mask: '', gw: '', active: 'ip', ads: [], sel: null,
+  dev: null, cmd: null, res: null, busy: false, seq: 0 };
+
+/* ---------- IP計算 ---------- */
+const ipValid = v => { const p = v.split('.'); return p.length === 4 && p.every(x => /^\d{1,3}$/.test(x) && +x <= 255); };
+const ipNum = v => v.split('.').reduce((a, x) => a * 256 + Number(x), 0);
+const numIp = n => [24, 16, 8, 0].map(s => Math.floor(n / 2 ** s) % 256).join('.');
+const prefMask = p => p === 0 ? 0 : 2 ** 32 - 2 ** (32 - p);
+const netOf = (ip, p) => { const b = 2 ** (32 - p); return Math.floor(ipNum(ip) / b) * b; };
+function maskInfo(v) {
+  if (/^\d{1,2}$/.test(v)) { const p = +v; return p <= 32 ? { p, d: numIp(prefMask(p)) } : null; }
+  if (!ipValid(v)) return null;
+  const n = ipNum(v);
+  for (let p = 0; p <= 32; p++) if (prefMask(p) === n) return { p, d: numIp(n) };
+  return null;
+}
+function check() {
+  const e = {};
+  if (!ipValid(st.ip)) e.ip = 'IPアドレスを4つの数字（0〜255）で入力してください';
+  const m = maskInfo(st.mask);
+  if (!m) e.mask = 'マスクは 255.255.255.0 か 24 のように入力してください';
+  if (!e.ip && m && m.p < 31) {
+    const host = ipNum(st.ip) - netOf(st.ip, m.p), size = 2 ** (32 - m.p);
+    if (host === 0 || host === size - 1) e.ip = 'ネットワーク／ブロードキャストアドレスは使えません';
+  }
+  if (st.gw) {
+    if (!ipValid(st.gw)) e.gw = 'GWのアドレスを確認してください';
+    else if (!e.ip && m && netOf(st.gw, m.p) !== netOf(st.ip, m.p)) e.gw = 'GWがIPと同じネットワークにありません';
+    else if (st.gw === st.ip) e.gw = 'GWとIPが同じです';
+  }
+  return e;
+}
+
+/* ---------- 表示 ---------- */
+function say(text, err = false) { const m = $('msg'); m.textContent = text; m.classList.toggle('err', err); }
+const connected = () => !!(st.dev && st.dev.gatt && st.dev.gatt.connected && st.cmd);
+
+function render() {
+  const errs = check();
+  F.forEach(f => {
+    $('v-' + f).textContent = st[f];
+    const row = document.querySelector(`.row[data-f="${f}"]`);
+    row.classList.toggle('active', st.active === f);
+    row.classList.toggle('bad', !!st[f] && !!errs[f] && st.active !== f);
+  });
+  const m = maskInfo(st.mask);
+  $('v-prefix').textContent = !m ? '' : (/^\d{1,2}$/.test(st.mask) ? '= ' + m.d : '/' + m.p);
+  const ready = connected() && st.sel !== null && !st.busy;
+  $('btnApply').disabled = !ready || Object.keys(errs).length > 0;
+  $('btnDhcp').disabled = !ready;
+}
+
+function renderAds() {
+  const box = $('adList'); box.textContent = '';
+  if (!st.ads.length) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = '表示できるアダプタがありません'; box.append(p); return; }
+  st.ads.forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ad' + (a.s === 'Up' ? '' : ' down');
+    b.setAttribute('aria-pressed', String(a.i === st.sel));
+    const n = document.createElement('b'); n.textContent = a.n;
+    const s = document.createElement('span');
+    s.textContent = (a.a ? `${a.a}/${a.p}` : '未設定') + (a.d ? '  DHCP' : '  固定') + (a.s === 'Up' ? '' : '  未接続');
+    b.append(n, s);
+    b.onclick = () => { st.sel = a.i; renderAds(); render(); describeSel(); };
+    box.append(b);
+  });
+}
+function selAd() { return st.ads.find(a => a.i === st.sel); }
+function describeSel() {
+  const a = selAd(); if (!a) return;
+  say(`${a.n}：現在 ${a.a ? a.a + '/' + a.p : '未設定'}（${a.d ? 'DHCP' : '固定'}）${a.g ? ' GW ' + a.g : ''}`);
+}
+
+function renderHist() {
+  const box = $('hist'); box.textContent = '';
+  const h = store.get('ipr.hist', []);
+  if (!h.length) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = '適用した設定がここに残ります'; box.append(p); return; }
+  h.forEach(x => {
+    const b = document.createElement('button'); b.type = 'button';
+    b.textContent = `${x.ip}/${maskInfo(x.mask)?.p ?? ''}`;
+    const s = document.createElement('small'); s.textContent = x.gw ? 'GW ' + x.gw : 'GW なし';
+    b.append(s);
+    b.onclick = () => { st.ip = x.ip; st.mask = x.mask; st.gw = x.gw; st.active = 'ip'; disarm(); render(); };
+    box.append(b);
+  });
+}
+function saveHist() {
+  const m = maskInfo(st.mask);
+  const item = { ip: st.ip, mask: m.d, gw: st.gw };
+  const h = store.get('ipr.hist', []).filter(x => !(x.ip === item.ip && x.mask === item.mask && x.gw === item.gw));
+  h.unshift(item); store.set('ipr.hist', h.slice(0, 6)); renderHist();
+}
+
+/* ---------- キー入力 ---------- */
+function press(k) {
+  disarm();
+  let v = st[st.active];
+  if (k === 'next') { st.active = F[(F.indexOf(st.active) + 1) % F.length]; render(); return; }
+  if (k === 'bs') v = v.slice(0, -1);
+  else if (k === 'c') v = '';
+  else if (k === '.') {
+    if (v === '' || v.endsWith('.') || v.split('.').length >= 4) return;
+    v += '.';
+  } else {
+    let p = v.split('.');
+    if (p[p.length - 1].length >= 3) { if (p.length >= 4) return; v += '.'; }
+    v += k;
+    p = v.split('.');
+    if (p[p.length - 1].length === 3 && p.length < 4) v += '.';  // 3桁で自動的に区切る
+  }
+  st[st.active] = v; render();
+}
+document.querySelectorAll('.k').forEach(b => b.addEventListener('click', () => press(b.dataset.k)));
+document.querySelectorAll('.row').forEach(r => r.addEventListener('click', () => { st.active = r.dataset.f; render(); }));
+
+document.querySelectorAll('.quick button').forEach(b => b.addEventListener('click', () => {
+  disarm();
+  const q = b.dataset.q;
+  if (/^\d+$/.test(q)) { st.mask = maskInfo(q).d; }
+  else if (q === 'gw1') {
+    const m = maskInfo(st.mask);
+    if (!ipValid(st.ip) || !m || m.p > 30) { say('先にIPとマスクを入力してください', true); return; }
+    st.gw = numIp(netOf(st.ip, m.p) + 1);
+  }
+  else if (q === 'gwnone') { st.gw = ''; }
+  else if (q === 'load') {
+    const a = selAd();
+    if (!a || !a.a) { say('読み込める現在値がありません', true); return; }
+    st.ip = a.a; st.mask = numIp(prefMask(a.p)); st.gw = a.g || '';
+  }
+  render();
+}));
+
+/* ---------- 確定ボタン（2回押し） ---------- */
+let armTimer = null;
+function disarm() {
+  clearTimeout(armTimer);
+  ['btnApply', 'btnDhcp'].forEach(id => { const b = $(id); delete b.dataset.armed; b.textContent = b.dataset.label; });
+}
+function armed(btn, fn) {
+  if (btn.dataset.armed) { disarm(); fn(); return; }
+  disarm(); btn.dataset.armed = '1'; btn.textContent = 'もう一度押して確定';
+  armTimer = setTimeout(disarm, 3000);
+}
+$('btnApply').onclick = e => armed(e.currentTarget, async () => {
+  const m = maskInfo(st.mask), a = selAd();
+  say(`${a.n} を ${st.ip}/${m.p} に変更しています…`);
+  const j = await send('S', [st.sel, st.ip, m.d, st.gw]);
+  if (j && j.ok) saveHist();
+});
+$('btnDhcp').onclick = e => armed(e.currentTarget, async () => {
+  say(`${selAd().n} をDHCPに戻しています…`);
+  await send('D', [st.sel]);
+});
+
+/* ---------- Bluetooth ---------- */
+function setConn(on, name) {
+  $('btnConn').classList.toggle('on', on);
+  $('connLabel').textContent = on ? (name || 'PC') + ' 接続中' : 'PCに接続';
+  if (!on) { st.cmd = st.res = null; }
+  render();
+}
+function onDisc() { setConn(false); say('PCとの接続が切れました。もう一度接続してください', true); }
+
+$('btnConn').onclick = async () => {
+  if (!navigator.bluetooth) { say('このブラウザはBluetoothに対応していません。iPhoneでは Bluefy で開いてください', true); return; }
+  if (connected()) { st.dev.gatt.disconnect(); return; }
+  try {
+    say('PCを探しています…');
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }] });
+    st.dev = dev;
+    dev.addEventListener('gattserverdisconnected', onDisc);
+    const gs = await dev.gatt.connect();
+    const s = await gs.getPrimaryService(SVC);
+    st.cmd = await s.getCharacteristic(CMD);
+    st.res = await s.getCharacteristic(RES);
+    setConn(true, dev.name);
+    say('接続しました。アダプタを読み込んでいます…');
+    await send('L');
+  } catch (e) {
+    setConn(false);
+    say(e.name === 'NotFoundError' ? 'PCの選択がキャンセルされました' : '接続できませんでした：' + e.message, e.name !== 'NotFoundError');
+  }
+};
+
+async function send(op, args = []) {
+  if (st.busy || !connected()) return null;
+  st.busy = true; render();
+  const q = String(++st.seq);
+  const text = [q, $('pin').value.trim(), op, ...args].join('|');
+  try {
+    const data = new TextEncoder().encode(text);
+    if (st.cmd.writeValueWithResponse) await st.cmd.writeValueWithResponse(data);
+    else await st.cmd.writeValue(data);
+    const j = await collect(q);
+    if (Array.isArray(j.l)) {
+      st.ads = j.l;
+      if (!st.ads.some(a => a.i === st.sel)) {
+        const up = st.ads.find(a => a.s === 'Up' && /イーサネット|Ethernet/i.test(a.n)) || st.ads.find(a => a.s === 'Up') || st.ads[0];
+        st.sel = up ? up.i : null;
+      }
+      renderAds();
+    }
+    if (op === 'L' && j.ok) describeSel(); else say(j.m || (j.ok ? '完了しました' : '失敗しました'), !j.ok);
+    return j;
+  } catch (e) {
+    say('通信エラー：' + e.message, true);
+    return null;
+  } finally {
+    st.busy = false; render();
+  }
+}
+
+async function collect(q) {
+  let bytes = [];
+  const deadline = Date.now() + 25000;
+  while (Date.now() < deadline) {
+    const dv = await st.res.readValue();
+    const b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    const flag = String.fromCharCode(b[0]);
+    if (flag === 'M' || flag === 'E') {
+      bytes = bytes.concat(Array.from(b.slice(1)));
+      if (flag === 'E') {
+        const j = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
+        if (String(j.q) === q) return j;
+        bytes = [];
+      }
+      continue;
+    }
+    await sleep(flag === 'W' ? 300 : 200);
+  }
+  throw new Error('PCから応答がありません');
+}
+
+/* ---------- 初期化 ---------- */
+$('pin').value = store.get('ipr.pin', '');
+$('pin').addEventListener('change', e => store.set('ipr.pin', e.target.value.trim()));
+renderHist(); render();
+say(navigator.bluetooth ? '右上の「PCに接続」から始めてください' : 'このブラウザはBluetoothに対応していません。iPhoneでは Bluefy で開いてください', !navigator.bluetooth);
+</script>
+</body>
+</html>
